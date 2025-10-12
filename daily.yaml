@@ -1,0 +1,48 @@
+name: Quarter-hour Export
+
+on:
+  schedule:
+    # Esegui ogni 15 minuti (in UTC)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # Permette al bot di fare commit e push
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pipeline (export SQLite -> CSV in ./output)
+        env:
+          SRC_FOLDER_ID: 1TAi1PJ3eCWS__1OgbbMfIZ9rmnOXK--1
+          SRC_FILE_ID: 1-FF8-2QtdlPruzzIJSy98Nhlc9n5LyeE
+          TARGET_FILENAME: data_raw.sqlite3
+          CSV_SEPARATOR: ";"
+          SQLITE_CHUNKSIZE: "250000"
+        run: python pipeline.py
+
+      - name: Commit & Push results
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/
+          git status
+          git commit -m "Quarter-hour export $(date -u '+%Y-%m-%d %H:%M:%S') UTC" || echo "No changes to commit"
+          git push
