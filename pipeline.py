@@ -1,6 +1,6 @@
 # pipeline.py
 # Scarica un database SQLite pubblico da Google Drive e esporta TUTTE le tabelle in CSV (separatore ';')
-# Salva i CSV in ./output/ (con manifest.json riassuntivo)
+# Salva i CSV in ./output/ (con manifest.json riassuntivo). Pulisce l'output a ogni run se CLEAN_OUTPUT=1.
 
 import os
 import glob
@@ -15,11 +15,6 @@ import pandas as pd
 
 # --- GUARD: esegui solo tra 15:00 e 02:00 (Europe/Rome) ---
 def _within_window_europe_rome(now=None):
-    """
-    Ritorna True se l'orario corrente in Europe/Rome è tra:
-    - 15:00 -> 23:59 (compresi)
-    - 00:00 -> 02:00 (compresi)
-    """
     if now is None:
         now = datetime.now(ZoneInfo("Europe/Rome"))
     h = now.hour
@@ -31,12 +26,13 @@ if not _within_window_europe_rome():
 # --- fine guard ---
 
 # =========== CONFIG ===========
-SRC_FOLDER_ID   = os.getenv("SRC_FOLDER_ID", "1TAi1PJ3eCWS__1OgbbMfIZ9rmnOXK--1")
-SRC_FILE_ID     = os.getenv("SRC_FILE_ID",   "1-FF8-2QtdlPruzzIJSy98Nhlc9n5LyeE")
+SRC_FOLDER_ID   = os.getenv("SRC_FOLDER_ID", "1vsVUoDGDGeVItdzkmWGZf5l0rA4gjfN4")  # NUOVA cartella Drive
+SRC_FILE_ID     = os.getenv("SRC_FILE_ID",   "")  # opzionale: se vuoi forzare l'ID file diretto
 TARGET_FILENAME = os.getenv("TARGET_FILENAME", "data_raw.sqlite3")
 
 CSV_SEPARATOR    = os.getenv("CSV_SEPARATOR", ";")
 SQLITE_CHUNKSIZE = int(os.getenv("SQLITE_CHUNKSIZE", "250000"))
+CLEAN_OUTPUT     = os.getenv("CLEAN_OUTPUT", "1") == "1"
 
 WORKDIR     = os.getenv("WORKDIR", ".")
 DOWNLOADDIR = os.path.join(WORKDIR, "tmp_download")
@@ -55,8 +51,24 @@ def md5sum(path: str) -> str:
 def safe_name(s: str) -> str:
     return "".join(c if c.isalnum() or c in "-._" else "_" for c in s)
 
+def clean_output_dir(out_dir: str):
+    removed = 0
+    for p in glob.glob(os.path.join(out_dir, "*")):
+        try:
+            os.remove(p)
+            removed += 1
+        except Exception:
+            pass
+    if removed:
+        print(f"[pipeline] Output pulito: rimossi {removed} file.")
+
 def download_sqlite_from_drive() -> str:
-    """Scarica il DB da Google Drive (file o cartella pubblica)."""
+    """
+    Usa gdown per scaricare il DB:
+    - se SRC_FILE_ID è impostato -> scarica direttamente
+    - altrimenti scarica tutta la cartella e cerca TARGET_FILENAME
+    Ritorna il path locale del DB.
+    """
     import gdown
 
     if SRC_FILE_ID:
@@ -66,6 +78,7 @@ def download_sqlite_from_drive() -> str:
             raise FileNotFoundError("Download dal file ID fallito.")
         return out
 
+    # fallback: cerca per nome dentro la cartella
     gdown.download_folder(id=SRC_FOLDER_ID, output=DOWNLOADDIR, quiet=True, use_cookies=False)
     candidates = [p for p in glob.glob(os.path.join(DOWNLOADDIR, "**", "*"), recursive=True)
                   if os.path.basename(p) == TARGET_FILENAME and os.path.isfile(p)]
@@ -74,7 +87,10 @@ def download_sqlite_from_drive() -> str:
     return candidates[0]
 
 def export_all_tables_sqlite(db_path: str, out_dir: str, sep: str = ";", chunksize: int = 200_000):
-    """Esporta tutte le tabelle del DB in CSV (uno per tabella)."""
+    """
+    Esporta tutte le tabelle del DB in CSV (uno per tabella).
+    Ritorna: lista di dict con info file.
+    """
     exported = []
     con = sqlite3.connect(db_path)
     try:
@@ -84,7 +100,7 @@ def export_all_tables_sqlite(db_path: str, out_dir: str, sep: str = ";", chunksi
         if not tables:
             raise ValueError("Nessuna tabella trovata nel database.")
 
-        print(f"Trovate {len(tables)} tabelle. Esporto in CSV...")
+        print(f"[pipeline] Trovate {len(tables)} tabelle. Esporto in CSV...")
         for t in tables:
             out_csv = os.path.join(out_dir, f"{safe_name(t)}.csv")
             first = True
@@ -95,15 +111,16 @@ def export_all_tables_sqlite(db_path: str, out_dir: str, sep: str = ";", chunksi
                     chunk.to_csv(out_csv, index=False, sep=sep,
                                  mode="w" if first else "a", header=first)
                     first = False
-                exported.append({
+                info = {
                     "table": t,
                     "csv_path": out_csv,
                     "rows": rows_total,
                     "md5": md5sum(out_csv)
-                })
-                print(f"✓ {t} -> {out_csv} (rows={rows_total})")
+                }
+                exported.append(info)
+                print(f"[pipeline] ✓ {t} -> {out_csv} (rows={rows_total})")
             except Exception as e:
-                print(f"⚠️ ERRORE su tabella {t}: {e}")
+                print(f"[pipeline] ⚠️ ERRORE su tabella {t}: {e}")
     finally:
         con.close()
     return exported
@@ -129,12 +146,16 @@ def write_manifest(out_dir: str, files_info: list):
     mpath = os.path.join(out_dir, "manifest.json")
     with open(mpath, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
-    print(f"Manifest scritto: {mpath}")
+    print(f"[pipeline] Manifest scritto: {mpath}")
     return mpath
 
 def main():
+    if CLEAN_OUTPUT:
+        clean_output_dir(OUTPUTDIR)
+
     db_path = download_sqlite_from_drive()
-    print("DB locale:", db_path, "size:", os.path.getsize(db_path), "bytes")
+    size = os.path.getsize(db_path)
+    print(f"[pipeline] DB locale: {db_path}  size: {size} bytes")
 
     files_info = export_all_tables_sqlite(db_path, OUTPUTDIR, sep=CSV_SEPARATOR, chunksize=SQLITE_CHUNKSIZE)
     write_manifest(OUTPUTDIR, files_info)
