@@ -2,12 +2,11 @@ name: Daily
 
 on:
   schedule:
-    # Esegui ogni 15 minuti (IN UTC)
-    - cron: '*/15 * * * *'
+    - cron: '*/15 * * * *'   # ogni 15 minuti (UTC)
   workflow_dispatch: {}
 
 permissions:
-  contents: write  # consente al bot di fare commit & push
+  contents: write
 
 jobs:
   run:
@@ -32,7 +31,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # (opzionale) Gate orario per non avviare nulla fuori finestra
       - name: Check time window (Europe/Rome)
         id: window
         run: |
@@ -45,17 +43,28 @@ jobs:
           fi
 
       - name: Run pipeline (export SQLite -> CSV in ./output)
-        if: steps.window.outputs.run == 'true'  # rimuovi questa riga se preferisci lasciare decidere solo a pipeline.py
+        # Esegui se siamo nella finestra OR se il run è manuale (workflow_dispatch)
+        if: steps.window.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
         env:
-          SRC_FOLDER_ID: 1vsVUoDGDGeVItdzkmWGZf5l0rA4gjfN4  # <-- nuova cartella Drive
+          SRC_FOLDER_ID: 1vsVUoDGDGeVItdzkmWGZf5l0rA4gjfN4
+          SRC_FILE_ID: 1D0eURKnVOJAlTvHGjUDbMqcUN4_CRr2F   # opzionale; se cambia ID, il Python fa fallback alla cartella per nome
           TARGET_FILENAME: data_raw.sqlite3
           CSV_SEPARATOR: ";"
           SQLITE_CHUNKSIZE: "250000"
-          CLEAN_OUTPUT: "1"   # pulisce output/ a ogni run
+          CLEAN_OUTPUT: "1"
+          # se l'evento è manuale, forza l’override orario nel Python
+          FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: python pipeline.py
 
+      - name: Ensure output dir is tracked (add .gitkeep if empty)
+        run: |
+          mkdir -p output
+          if [ -z "$(ls -A output || true)" ]; then
+            echo "placeholder" > output/.gitkeep
+          fi
+
       - name: Commit & Push results
-        if: steps.window.outputs.run == 'true'
+        if: steps.window.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config --global user.name  "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
