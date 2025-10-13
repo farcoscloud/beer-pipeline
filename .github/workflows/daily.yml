@@ -1,0 +1,65 @@
+name: Daily
+
+on:
+  schedule:
+    # Esegui ogni 15 minuti (IN UTC)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # consente al bot di fare commit & push
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: beer-pipeline
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # (opzionale) Gate orario per non avviare nulla fuori finestra
+      - name: Check time window (Europe/Rome)
+        id: window
+        run: |
+          sudo apt-get update >/dev/null 2>&1 && sudo apt-get install -y tzdata >/dev/null 2>&1
+          hour=$(TZ=Europe/Rome date +%H)
+          if [[ $hour -ge 15 || $hour -lt 3 ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run pipeline (export SQLite -> CSV in ./output)
+        if: steps.window.outputs.run == 'true'  # rimuovi questa riga se preferisci lasciare decidere solo a pipeline.py
+        env:
+          SRC_FOLDER_ID: 1vsVUoDGDGeVItdzkmWGZf5l0rA4gjfN4  # <-- nuova cartella Drive
+          TARGET_FILENAME: data_raw.sqlite3
+          CSV_SEPARATOR: ";"
+          SQLITE_CHUNKSIZE: "250000"
+          CLEAN_OUTPUT: "1"   # pulisce output/ a ogni run
+        run: python pipeline.py
+
+      - name: Commit & Push results
+        if: steps.window.outputs.run == 'true'
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/
+          git status
+          git commit -m "Quarter-hour export $(date -u '+%Y-%m-%d %H:%M:%S') UTC" || echo "No changes to commit"
+          git push
