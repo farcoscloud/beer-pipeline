@@ -1,4 +1,4 @@
-# pipeline.py
+ì# pipeline.py
 # Scarica un database SQLite pubblico da Google Drive e esporta TUTTE le tabelle in CSV (separatore ';')
 # Salva i CSV in ./output/ (con manifest.json riassuntivo). Pulisce l'output a ogni run se CLEAN_OUTPUT=1.
 
