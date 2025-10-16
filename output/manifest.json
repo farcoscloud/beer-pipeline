@@ -1,5 +1,5 @@
 {
-  "run_date_iso": "2025-10-16T15:53:41.328579+00:00",
+  "run_date_iso": "2025-10-16T16:52:45.892030+00:00",
   "source": {
     "folder_id": "1vsVUoDGDGeVItdzkmWGZf5l0rA4gjfN4",
     "file_id": "1D0eURKnVOJAlTvHGjUDbMqcUN4_CRr2F",
@@ -10,14 +10,14 @@
     {
       "table": "cardpurchases",
       "filename": "cardpurchases.csv",
-      "rows": 19243,
-      "md5": "4255070b3c24713aa30b00d448b9d248"
+      "rows": 19254,
+      "md5": "4cabf2e0cb2e8b9a66d39340539cec31"
     },
     {
       "table": "current_cards",
       "filename": "current_cards.csv",
-      "rows": 81422,
-      "md5": "a5f2b143e9a253863a58b9e0a7a69bbe"
+      "rows": 81433,
+      "md5": "059616efa6314bd28f9398de370d85e8"
     },
     {
       "table": "dbmeta",
@@ -34,8 +34,8 @@
     {
       "table": "taptransactions",
       "filename": "taptransactions.csv",
-      "rows": 69599,
-      "md5": "6eb39e9fd2dfc2dafa8271664ce018a7"
+      "rows": 69630,
+      "md5": "f217da50ecf69f8ff8e8a4f4d188c9cc"
     },
     {
       "table": "taptransactions_ext_pending",
