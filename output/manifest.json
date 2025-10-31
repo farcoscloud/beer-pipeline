@@ -1,5 +1,5 @@
 {
-  "run_date_iso": "2025-10-31T21:41:48.649468+00:00",
+  "run_date_iso": "2025-10-31T21:50:23.049591+00:00",
   "source": {
     "folder_id": "1vsVUoDGDGeVItdzkmWGZf5l0rA4gjfN4",
     "file_id": "1D0eURKnVOJAlTvHGjUDbMqcUN4_CRr2F",
@@ -17,7 +17,7 @@
       "table": "current_cards",
       "filename": "current_cards.csv",
       "rows": 82334,
-      "md5": "a977373e690daa65a13b114c4c499088"
+      "md5": "9086828cb63fe09cf53c6299d5d71967"
     },
     {
       "table": "dbmeta",
